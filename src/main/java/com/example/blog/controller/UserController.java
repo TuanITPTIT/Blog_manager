@@ -20,10 +20,6 @@ public class UserController {
         this.userService = userService;
     }
 
-    @PostMapping
-    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody UserRequest request){
-        return ResponseEntity.status(HttpStatus.CREATED).body(userService.createUser(request));
-    }
     @GetMapping
     public List<UserResponse> getAllUsers(){
         return userService.getAllUsers();

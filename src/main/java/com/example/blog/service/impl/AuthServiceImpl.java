@@ -7,7 +7,9 @@ import com.example.blog.dto.response.UserResponse;
 import com.example.blog.entity.Role;
 import com.example.blog.entity.User;
 import com.example.blog.repository.UserRepository;
+import com.example.blog.security.JwtService;
 import com.example.blog.service.AuthService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,15 +24,22 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
+    private final long expirationMinutes;
 
     public AuthServiceImpl(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            AuthenticationManager authenticationManager
+            AuthenticationManager authenticationManager,
+            JwtService jwtService,
+            @Value("${app.jwt.expiration-minutes}")
+            long expirationMinutes
     ){
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
+        this.jwtService = jwtService;
+        this.expirationMinutes = expirationMinutes;
     }
     @Override
     @Transactional
@@ -45,9 +54,9 @@ public class AuthServiceImpl implements AuthService {
         User user = new User();
         user.setUsername(request.username());
         user.setEmail(request.email());
-        user.setRole(Role.USER);
         user.setFullName(request.fullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole(Role.USER);
 
         User savedUser = userRepository.save(user);
         return new UserResponse(savedUser.getId(),savedUser.getUsername(), savedUser.getEmail(),savedUser.getFullName());
@@ -58,10 +67,21 @@ public class AuthServiceImpl implements AuthService {
         try{
             var authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.username(), request.password()));
             User user = userRepository.findByUsername(authentication.getName()).orElseThrow(()-> new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Invalid credentials"));
-            return new LoginResponse("Login success", user.getId(),user.getUsername());
+            if(user.getRole() == null){
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Account role is not assigned");
+            }
+            String token = jwtService.generateToken(user);
+            return new LoginResponse("Login success", user.getId(),user.getUsername(), token, "Bearer", expirationMinutes * 60);
         } catch (AuthenticationException e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Invalid username or password");
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getCurrentUser(String username){
+        User user = userRepository.findByUsername(username).orElseThrow(()-> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        return new UserResponse(user.getId(), user.getUsername(), user.getEmail(), user.getFullName());
     }
 
 }

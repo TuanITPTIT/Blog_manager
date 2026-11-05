@@ -9,4 +9,5 @@ import com.example.blog.repository.UserRepository;
 public interface AuthService {
     UserResponse register(RegisterRequest request);
     LoginResponse login(LoginRequest request);
+    UserResponse getCurrentUser(String username);
 }
